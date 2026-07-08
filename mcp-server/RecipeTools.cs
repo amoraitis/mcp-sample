@@ -19,10 +19,10 @@ namespace mcp_server
             return await _mealieService.GetAllRecipes();
         }
 
-        [McpServerTool, Description("Retrieves only the names of all recipes from the server.")]
-        public static async Task<string> GetAllRecipeNames()
+        [McpServerTool, Description("Streams only the names of all recipes from the server.")]
+        public static IAsyncEnumerable<string> GetAllRecipeNames(CancellationToken cancellationToken = default)
         {
-            return await _mealieService.GetAllRecipeNames();
+            return _mealieService.GetAllRecipeNames(cancellationToken);
         }
 
         [McpServerTool, Description("Retrieves today's meal plan.")]
@@ -41,6 +41,12 @@ namespace mcp_server
         public static async Task<string> CreateWithJSON([Description("The schema.org Recipe JSON document to pass to Mealie's create/html-or-json endpoint.")] string jsonSchema)
         {
             return await _mealieService.CreateWithJSONAsync(jsonSchema);
+        }
+
+        [McpServerTool, Description("Creates a recipe from a recipe webpage URL.")]
+        public static async Task<string> CreateWithUrl([Description("The recipe webpage URL to pass to Mealie's create/html-or-json endpoint.")] string recipeUrl)
+        {
+            return await _mealieService.CreateWithUrlAsync(recipeUrl);
         }
     }
 }

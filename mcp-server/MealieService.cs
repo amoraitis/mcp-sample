@@ -135,43 +135,63 @@ namespace mcp_server
             return string.Empty;
         }
 
-        public Task<string> CreateWithJSONAsync(string jsonSchema)
-        {
-            return CreateFromHtmlOrJsonDataAsync(jsonSchema, "recipe JSON");
-        }
-
-        public Task<string> CreateWithUrlAsync(string recipeUrl)
-        {
-            return CreateFromHtmlOrJsonDataAsync(recipeUrl, "recipe URL");
-        }
-
-        private async Task<string> CreateFromHtmlOrJsonDataAsync(string data, string sourceDescription)
+        public async Task<string> CreateWithJSONAsync(string jsonSchema)
         {
             try
             {
-                var url = "/api/recipes/create/html-or-json";
                 var payload = JsonSerializer.Serialize(new
                 {
                     includeTags = true,
-                    data
+                    data = jsonSchema
                 });
 
-                var content = new StringContent(payload, Encoding.UTF8, "application/json");
-                using var response = await _clientFactory.CreateClient(nameof(MealieService)).PostAsync(url, content);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    return await response.Content.ReadAsStringAsync();
-                }
-
-                _logger.LogError("Error creating recipe from {SourceDescription}: {StatusCode} - {ReasonPhrase}", sourceDescription, response.StatusCode, response.ReasonPhrase);
-                return string.Empty;
+                return await PostRecipeCreationPayloadAsync(
+                    "/api/recipes/create/html-or-json",
+                    payload,
+                    "recipe JSON");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error creating recipe from {SourceDescription}", sourceDescription);
+                _logger.LogError(ex, "Error creating recipe from recipe JSON");
                 return string.Empty;
             }
+        }
+
+        public async Task<string> CreateWithUrlAsync(string recipeUrl)
+        {
+            try
+            {
+                var payload = JsonSerializer.Serialize(new
+                {
+                    includeCategories = true,
+                    includeTags = true,
+                    url = recipeUrl
+                });
+
+                return await PostRecipeCreationPayloadAsync(
+                    "/api/recipes/create/url/stream",
+                    payload,
+                    "recipe URL");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating recipe from recipe URL");
+                return string.Empty;
+            }
+        }
+
+        private async Task<string> PostRecipeCreationPayloadAsync(string url, string payload, string sourceDescription)
+        {
+            var content = new StringContent(payload, Encoding.UTF8, "application/json");
+            using var response = await _clientFactory.CreateClient(nameof(MealieService)).PostAsync(url, content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                return await response.Content.ReadAsStringAsync();
+            }
+
+            _logger.LogError("Error creating recipe from {SourceDescription}: {StatusCode} - {ReasonPhrase}", sourceDescription, response.StatusCode, response.ReasonPhrase);
+            return string.Empty;
         }
 
         private async Task<string> GetRecipesPageAsync(int page, int perPage, CancellationToken cancellationToken = default)

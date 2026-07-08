@@ -135,7 +135,17 @@ namespace mcp_server
             return string.Empty;
         }
 
-        public async Task<string> CreateWithJSONAsync(string jsonSchema)
+        public Task<string> CreateWithJSONAsync(string jsonSchema)
+        {
+            return CreateFromHtmlOrJsonDataAsync(jsonSchema, "recipe JSON");
+        }
+
+        public Task<string> CreateWithUrlAsync(string recipeUrl)
+        {
+            return CreateFromHtmlOrJsonDataAsync(recipeUrl, "recipe URL");
+        }
+
+        private async Task<string> CreateFromHtmlOrJsonDataAsync(string data, string sourceDescription)
         {
             try
             {
@@ -143,7 +153,7 @@ namespace mcp_server
                 var payload = JsonSerializer.Serialize(new
                 {
                     includeTags = true,
-                    data = jsonSchema
+                    data
                 });
 
                 var content = new StringContent(payload, Encoding.UTF8, "application/json");
@@ -154,12 +164,12 @@ namespace mcp_server
                     return await response.Content.ReadAsStringAsync();
                 }
 
-                _logger.LogError("Error creating recipe: {StatusCode} - {ReasonPhrase}", response.StatusCode, response.ReasonPhrase);
+                _logger.LogError("Error creating recipe from {SourceDescription}: {StatusCode} - {ReasonPhrase}", sourceDescription, response.StatusCode, response.ReasonPhrase);
                 return string.Empty;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error creating recipe");
+                _logger.LogError(ex, "Error creating recipe from {SourceDescription}", sourceDescription);
                 return string.Empty;
             }
         }

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -75,35 +76,34 @@ namespace mcp_server
             }
         }
 
-        public async Task<string> GetAllRecipeNames()
+        public async IAsyncEnumerable<string> GetAllRecipeNames([EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            try
+            var page = 1;
+            var emittedNames = 0;
+            int? total = null;
+
+            while (!cancellationToken.IsCancellationRequested)
             {
-                var recipesJson = await GetAllRecipes();
-
-                if (string.IsNullOrWhiteSpace(recipesJson))
+                var recipeNamesPage = await GetRecipeNamesPageAsync(page, RecipePageSize, cancellationToken);
+                if (recipeNamesPage is null || recipeNamesPage.Value.ItemsOnPage == 0)
                 {
-                    return "[]";
+                    yield break;
                 }
 
-                using var document = JsonDocument.Parse(recipesJson);
-                var names = new List<string>();
-
-                if (document.RootElement.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
+                foreach (var name in recipeNamesPage.Value.Names)
                 {
-                    AddRecipeNames(items, names);
-                }
-                else if (document.RootElement.ValueKind == JsonValueKind.Array)
-                {
-                    AddRecipeNames(document.RootElement, names);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    emittedNames++;
+                    yield return name;
                 }
 
-                return JsonSerializer.Serialize(names);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error retrieving recipe names");
-                return "[]";
+                total ??= recipeNamesPage.Value.Total;
+                if (total.HasValue && emittedNames >= total.Value)
+                {
+                    yield break;
+                }
+
+                page++;
             }
         }
 
@@ -178,18 +178,55 @@ namespace mcp_server
             return string.Empty;
         }
 
-        private static void AddRecipeNames(JsonElement recipes, ICollection<string> names)
+        private async Task<(List<string> Names, int ItemsOnPage, int? Total)?> GetRecipeNamesPageAsync(int page, int perPage, CancellationToken cancellationToken)
         {
-            foreach (var recipe in recipes.EnumerateArray())
+            try
             {
-                if (recipe.TryGetProperty("name", out var nameElement) && nameElement.ValueKind == JsonValueKind.String)
+                var pageJson = await GetRecipesPageAsync(page, perPage);
+                if (string.IsNullOrWhiteSpace(pageJson))
                 {
-                    var name = nameElement.GetString();
-                    if (!string.IsNullOrWhiteSpace(name))
+                    return null;
+                }
+
+                using var document = JsonDocument.Parse(pageJson);
+                if (!document.RootElement.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+                {
+                    return null;
+                }
+
+                var names = new List<string>();
+                var itemsOnPage = 0;
+                foreach (var recipe in items.EnumerateArray())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    itemsOnPage++;
+
+                    if (recipe.TryGetProperty("name", out var nameElement) && nameElement.ValueKind == JsonValueKind.String)
                     {
-                        names.Add(name);
+                        var name = nameElement.GetString();
+                        if (!string.IsNullOrWhiteSpace(name))
+                        {
+                            names.Add(name);
+                        }
                     }
                 }
+
+                int? total = null;
+                if (document.RootElement.TryGetProperty("total", out var totalElement) && totalElement.TryGetInt32(out var parsedTotal))
+                {
+                    total = parsedTotal;
+                }
+
+                return (names, itemsOnPage, total);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving recipe names");
+                return null;
             }
         }
     }

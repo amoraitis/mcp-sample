@@ -4,10 +4,11 @@ This repository contains a sample implementation of a Model Context Protocol (MC
 
 ## Features
 - [x] Retrieve all recipes from a Mealie server
-- [x] Retrieve all recipe names from a Mealie server
+- [x] Stream all recipe names from a Mealie server
 - [x] Get today's meal plan
 - [x] Fetch a recipe by its ID - helps when the copilot has already fetched one from the previous queries
 - [x] Create a recipe using a schema.org Recipe JSON document
+- [x] Create a recipe from a recipe webpage URL
 - [x] Logging with Serilog
 
 ## Project Structure
@@ -44,10 +45,11 @@ This repository contains a sample implementation of a Model Context Protocol (MC
 
 ## MCP tools
 - `GetAllRecipes` - retrieves all recipes from Mealie.
-- `GetAllRecipeNames` - retrieves only the recipe names from Mealie.
+- `GetAllRecipeNames` - streams recipe names from Mealie using `IAsyncEnumerable<string>`.
 - `GetTodaysMeal` - retrieves today's meal plan.
 - `GetRecipeById` - retrieves a recipe by ID.
 - `CreateWithJSON` - creates a recipe from a schema.org Recipe JSON document through Mealie's `create/html-or-json` endpoint.
+- `CreateWithUrl` - creates a recipe from a recipe webpage URL through Mealie's `create/html-or-json` endpoint.
 
 ## VS Code integration
 

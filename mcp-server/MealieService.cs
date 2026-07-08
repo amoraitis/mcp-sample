@@ -79,7 +79,7 @@ namespace mcp_server
         public async IAsyncEnumerable<string> GetAllRecipeNames([EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             var page = 1;
-            var emittedNames = 0;
+            var processedRecipes = 0;
             int? total = null;
 
             while (!cancellationToken.IsCancellationRequested)
@@ -93,12 +93,12 @@ namespace mcp_server
                 foreach (var name in recipeNamesPage.Value.Names)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    emittedNames++;
                     yield return name;
                 }
 
+                processedRecipes += recipeNamesPage.Value.ItemsOnPage;
                 total ??= recipeNamesPage.Value.Total;
-                if (total.HasValue && emittedNames >= total.Value)
+                if (total.HasValue && processedRecipes >= total.Value)
                 {
                     yield break;
                 }
@@ -164,14 +164,14 @@ namespace mcp_server
             }
         }
 
-        private async Task<string> GetRecipesPageAsync(int page, int perPage)
+        private async Task<string> GetRecipesPageAsync(int page, int perPage, CancellationToken cancellationToken = default)
         {
             var url = $"/api/recipes?orderDirection=desc&page={page}&perPage={perPage}&requireAllCategories=false&requireAllTags=false&requireAllTools=false&requireAllFoods=false";
-            using var response = await _clientFactory.CreateClient(nameof(MealieService)).GetAsync(url);
+            using var response = await _clientFactory.CreateClient(nameof(MealieService)).GetAsync(url, cancellationToken);
 
             if (response.IsSuccessStatusCode)
             {
-                return await response.Content.ReadAsStringAsync();
+                return await response.Content.ReadAsStringAsync(cancellationToken);
             }
 
             _logger.LogError("Error retrieving recipes: {StatusCode} - {ReasonPhrase}", response.StatusCode, response.ReasonPhrase);
@@ -182,7 +182,7 @@ namespace mcp_server
         {
             try
             {
-                var pageJson = await GetRecipesPageAsync(page, perPage);
+                var pageJson = await GetRecipesPageAsync(page, perPage, cancellationToken);
                 if (string.IsNullOrWhiteSpace(pageJson))
                 {
                     return null;

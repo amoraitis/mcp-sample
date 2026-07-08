@@ -1,13 +1,15 @@
 # MCP Sample Project
 
-This repository contains a sample implementation of a Model Context Protocol (MCP) server for recipe management, using .NET 8, Serilog, and Mealie API integration.
+This repository contains a sample implementation of a Model Context Protocol (MCP) server for recipe management, using .NET 10, Serilog, and Mealie API integration.
 
 ## Features
-- [x] Retrieve all (kind-of) recipes from a Mealie server
+- [x] Retrieve all recipes from a Mealie server
+- [x] Stream all recipe names from a Mealie server
 - [x] Get today's meal plan
 - [x] Fetch a recipe by its ID - helps when the copilot has already fetched one from the previous queries
+- [x] Create a recipe using a schema.org Recipe JSON document
+- [x] Create a recipe from a recipe webpage URL
 - [x] Logging with Serilog
-- [ ] Create a recipe using a JSON schema (not working out of the box)
 
 ## Project Structure
 - `mcp-server/` - Main MCP server implementation
@@ -18,7 +20,7 @@ This repository contains a sample implementation of a Model Context Protocol (MC
 - `tests/` - Unit tests using NUnit and Moq
 
 ## Prerequisites
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - Access to a Mealie server (for real API calls)
 
 ## Getting Started
@@ -40,6 +42,15 @@ This repository contains a sample implementation of a Model Context Protocol (MC
    ```sh
    dotnet run --project mcp-server
    ```
+
+## MCP tools
+- `GetAllRecipes` - retrieves all recipes from Mealie.
+- `GetAllRecipeNames` - streams recipe names from Mealie using `IAsyncEnumerable<string>`.
+- `GetTodaysMeal` - retrieves today's meal plan.
+- `GetRecipeById` - retrieves a recipe by ID.
+- `CreateWithJSON` - creates a recipe from a schema.org Recipe JSON document through Mealie's `create/html-or-json` endpoint.
+- `CreateWithUrl` - creates a recipe from a recipe webpage URL through Mealie's `create/html-or-json` endpoint.
+
 ## VS Code integration
 
 Add `.vscode/mcp.json`:

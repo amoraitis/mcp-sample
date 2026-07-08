@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Moq.Protected;
@@ -20,7 +21,7 @@ namespace mcp_server.Tests
             _mealieService = new MealieService(_mockHttpClientFactory.Object, _mockLogger.Object);
         }
 
-        private HttpClient CreateMockHttpClient(string responseContent, HttpStatusCode statusCode = HttpStatusCode.OK)
+        private HttpClient CreateMockHttpClient(string responseContent, HttpStatusCode statusCode = HttpStatusCode.OK, Action<HttpRequestMessage>? inspectRequest = null)
         {
             var mockHttpMessageHandler = new Mock<HttpMessageHandler>();
             mockHttpMessageHandler
@@ -30,6 +31,7 @@ namespace mcp_server.Tests
                     ItExpr.IsAny<HttpRequestMessage>(),
                     ItExpr.IsAny<CancellationToken>()
                 )
+                .Callback<HttpRequestMessage, CancellationToken>((request, _) => inspectRequest?.Invoke(request))
                 .ReturnsAsync(new HttpResponseMessage
                 {
                     StatusCode = statusCode,
@@ -47,7 +49,7 @@ namespace mcp_server.Tests
         public async Task GetAllRecipes_ReturnsRecipes_WhenSuccessful()
         {
             // Arrange
-            var client = CreateMockHttpClient("[{\"id\":1,\"name\":\"Recipe1\"}]");
+            var client = CreateMockHttpClient("{\"items\":[{\"id\":1,\"name\":\"Recipe1\"}],\"total\":1}");
             _mockHttpClientFactory
                 .Setup(factory => factory.CreateClient(nameof(MealieService)))
                 .Returns(client);
@@ -56,8 +58,28 @@ namespace mcp_server.Tests
             var result = await _mealieService.GetAllRecipes();
 
             // Assert
-            Assert.NotNull(result);
-            StringAssert.Contains("Recipe1", result);
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result, Does.Contain("Recipe1"));
+        }
+
+        [Test]
+        public async Task GetAllRecipeNames_StreamsRecipeNames_WhenSuccessful()
+        {
+            // Arrange
+            var client = CreateMockHttpClient("{\"items\":[{\"id\":1,\"name\":\"Recipe1\"},{\"id\":2,\"name\":\"Recipe2\"}],\"total\":2}");
+            _mockHttpClientFactory
+                .Setup(factory => factory.CreateClient(nameof(MealieService)))
+                .Returns(client);
+
+            // Act
+            var names = new List<string>();
+            await foreach (var name in _mealieService.GetAllRecipeNames())
+            {
+                names.Add(name);
+            }
+
+            // Assert
+            Assert.That(names, Is.EqualTo(new[] { "Recipe1", "Recipe2" }));
         }
 
         [Test]
@@ -73,8 +95,8 @@ namespace mcp_server.Tests
             var result = await _mealieService.GetTodaysMeal();
 
             // Assert
-            Assert.NotNull(result);
-            StringAssert.Contains("Lunch", result);
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result, Does.Contain("Lunch"));
         }
 
         [Test]
@@ -91,16 +113,22 @@ namespace mcp_server.Tests
             var result = await _mealieService.GetRecipeById(recipeId);
 
             // Assert
-            Assert.NotNull(result);
-            StringAssert.Contains("Recipe123", result);
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result, Does.Contain("Recipe123"));
         }
 
         [Test]
-        public async Task CreateWithJSONAsync_ReturnsResponse_WhenSuccessful()
+        public async Task CreateWithJSONAsync_SendsSchemaAsJsonString_WhenSuccessful()
         {
             // Arrange
             var jsonSchema = "{\"name\":\"New Recipe\"}";
-            var client = CreateMockHttpClient("{\"success\":true}");
+            string? requestBody = null;
+            Uri? requestUri = null;
+            var client = CreateMockHttpClient("{\"success\":true}", inspectRequest: request =>
+            {
+                requestUri = request.RequestUri;
+                requestBody = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult();
+            });
             _mockHttpClientFactory
                 .Setup(factory => factory.CreateClient(nameof(MealieService)))
                 .Returns(client);
@@ -109,8 +137,45 @@ namespace mcp_server.Tests
             var result = await _mealieService.CreateWithJSONAsync(jsonSchema);
 
             // Assert
-            Assert.NotNull(result);
-            StringAssert.Contains("success", result);
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result, Does.Contain("success"));
+            Assert.That(requestUri?.AbsolutePath, Is.EqualTo("/api/recipes/create/html-or-json"));
+            Assert.That(requestBody, Is.Not.Null);
+
+            using var document = JsonDocument.Parse(requestBody!);
+            Assert.That(document.RootElement.GetProperty("includeTags").GetBoolean(), Is.True);
+            Assert.That(document.RootElement.GetProperty("data").GetString(), Is.EqualTo(jsonSchema));
+        }
+
+        [Test]
+        public async Task CreateWithUrlAsync_SendsUrlStreamEndpointPayload_WhenSuccessful()
+        {
+            // Arrange
+            var recipeUrl = "https://example.com/recipes/pasta";
+            string? requestBody = null;
+            Uri? requestUri = null;
+            var client = CreateMockHttpClient("{\"success\":true}", inspectRequest: request =>
+            {
+                requestUri = request.RequestUri;
+                requestBody = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult();
+            });
+            _mockHttpClientFactory
+                .Setup(factory => factory.CreateClient(nameof(MealieService)))
+                .Returns(client);
+
+            // Act
+            var result = await _mealieService.CreateWithUrlAsync(recipeUrl);
+
+            // Assert
+            Assert.That(result, Is.Not.Null);
+            Assert.That(result, Does.Contain("success"));
+            Assert.That(requestUri?.AbsolutePath, Is.EqualTo("/api/recipes/create/url/stream"));
+            Assert.That(requestBody, Is.Not.Null);
+
+            using var document = JsonDocument.Parse(requestBody!);
+            Assert.That(document.RootElement.GetProperty("includeCategories").GetBoolean(), Is.True);
+            Assert.That(document.RootElement.GetProperty("includeTags").GetBoolean(), Is.True);
+            Assert.That(document.RootElement.GetProperty("url").GetString(), Is.EqualTo(recipeUrl));
         }
     }
 }
